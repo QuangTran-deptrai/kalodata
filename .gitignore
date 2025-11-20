@@ -26,3 +26,5 @@ Thumbs.db
 
 
 *.log
+
+Add-Content .gitignore "`r`nlogs/"

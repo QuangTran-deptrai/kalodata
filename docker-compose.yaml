@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+ 
+  mysql_data:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: rootsecretpassword
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./mysql_init:/docker-entrypoint-initdb.d
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  
+  airflow-webserver:
+    build: .
+    command: webserver
+    ports:
+      - "8080:8080"
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      # Cấu hình tài khoản mặc định
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: 'admin'
+      _AIRFLOW_WWW_USER_PASSWORD: 'adminpassword'
+      # Biến môi trường cho Python
+      KALO_PHONE: ${KALO_PHONE}
+      KALO_PASSWORD: ${KALO_PASSWORD}
+      DB_HOST: mysql_data
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql_data:
+        condition: service_healthy
+
+
+  airflow-scheduler:
+    build: .
+    command: scheduler
+    environment: *airflow-env
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+ 
+  airflow-init:
+    build: .
+  
+    environment: *airflow-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command: -c "airflow db init && airflow users create --username kalodata --password kalodata123 --firstname Admin --lastname User --role Admin --email admin@example.com"
+
+ 
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  db_data:

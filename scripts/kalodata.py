@@ -1,7 +1,8 @@
 import time
 import os
 import undetected_chromedriver as uc
-import config
+import scripts.config as config
+from sqlalchemy import create_engine, text
 import pandas as pd
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -14,7 +15,17 @@ from selenium.common.exceptions import (
     StaleElementReferenceException, ElementClickInterceptedException
 )
 
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASS = os.getenv('DB_PASSWORD', '')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_NAME = os.getenv('DB_NAME', 'kalodata_db')
 
+try:
+    DB_CONNECTION_STR = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:3306/{DB_NAME}"
+    db_engine = create_engine(DB_CONNECTION_STR)
+except Exception as e:
+    print(f" Lỗi cấu hình DB: {e}")
+    db_engine = None
 
 
 
@@ -188,7 +199,7 @@ def load_checkpoint():
     global done_names_lives, done_links_lives
     global done_shop_creators # <--- Khai báo biến mới
     
-    if os.path.exists(config.config.FILE_NAME):
+    if os.path.exists(config.FILE_NAME):
         print(f"--- TÌM THẤY FILE. ĐANG NẠP DỮ LIỆU CŨ... ---")
         try:
             # Load Shop
@@ -261,7 +272,6 @@ def load_checkpoint():
             print(f"--- ĐÃ NẠP DỮ LIỆU CŨ ---")
         except Exception as e: print(f"--- LỖI ĐỌC FILE CŨ ({e}). SẼ CHẠY MỚI. ---")
 
-# --- 2. CẬP NHẬT HÀM SAVE_CHECKPOINT ---
 def save_checkpoint():
     try:
         # Kiểm tra xem có dữ liệu nào để lưu không
@@ -273,17 +283,14 @@ def save_checkpoint():
                 pd.DataFrame(columns=['Shop Link', 'Date Filter']).to_excel(writer, sheet_name="Shop_Metrics", index=False)
                 pd.DataFrame(columns=['Shop Link', 'Product Name', 'TikTok Product Link', 'Date Filter']).to_excel(writer, sheet_name="Product_Metrics", index=False)
                 pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Name', 'TikTok Link', 'Date Filter']).to_excel(writer, sheet_name="Creators", index=False)
-                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Link', 'Type', 'Revenue', 'Item Title', 'Date Filter']).to_excel(writer, sheet_name="Videos", index=False) 
-                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Revenue', 'Link', 'Item Title', 'Livestream Time', 'Duration', 'Date Filter']).to_excel(writer, sheet_name="Lives", index=False) 
-                # --- Sheet Mới: creator_dim_shop ---
+                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Link', 'Type', 'Revenue', 'Item Title', 'Date Filter']).to_excel(writer, sheet_name="Videos", index=False)
+                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Revenue', 'Link', 'Item Title', 'Livestream Time', 'Duration', 'Avg Online Viewer', 'Views', 'Item Sold', 'Avg Unit Price', 'Date Filter']).to_excel(writer, sheet_name="Lives", index=False)
                 pd.DataFrame(columns=['Shop Link', 'Creator Name', 'Account Type', 'TikTok Link', 'MCN', 'Debut Time', 'Creator Bio', 'Target Sexual', 'Target Age', 'Followers', 'Date Filter']).to_excel(writer, sheet_name="creator_dim_shop", index=False)
-                # -----------------------------------
                 pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link']).to_excel(writer, sheet_name="product_Dim", index=False)
             return
 
         # --- ÁNH XẠ CREATOR LINK NGAY TRƯỚC KHI LƯU ---
         print("    [System] Bắt đầu ánh xạ Creator Link cho Videos và Lives trước khi lưu...")
-        # Xây dựng bản đồ từ data_store["Creators"]
         creator_link_map_final = {}
         for record in data_store.get("Creators", []):
             shop_link = str(record.get("Shop Link", "N/A")).strip().lower()
@@ -295,7 +302,6 @@ def save_checkpoint():
             if key not in creator_link_map_final:
                 creator_link_map_final[key] = creator_link
 
-        # Ánh xạ cho Videos
         updated_videos_count = 0
         for record in data_store.get("Videos", []):
             shop_link = str(record.get("Shop Link", "N/A")).strip().lower()
@@ -308,7 +314,6 @@ def save_checkpoint():
                 record["Creator Link"] = found_link
                 updated_videos_count += 1
 
-        # Ánh xạ cho Lives
         updated_lives_count = 0
         for record in data_store.get("Lives", []):
             shop_link = str(record.get("Shop Link", "N/A")).strip().lower()
@@ -321,109 +326,133 @@ def save_checkpoint():
                 record["Creator Link"] = found_link
                 updated_lives_count += 1
         print(f"    [System] Hoàn tất ánh xạ. Cập nhật {updated_videos_count} Creator Link trong Videos và {updated_lives_count} Creator Link trong Lives.")
-        # --- HẾT ÁNH XẠ CREATOR LINK ---
+       
 
-        with pd.ExcelWriter(config.FILE_NAME, engine='openpyxl') as writer:
-            # --- Shop Metrics ---
-            if data_store["Shop_Metrics"]: 
-                df_to_save = pd.DataFrame(data_store["Shop_Metrics"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.drop_duplicates(subset=['Shop Link']).to_excel(writer, sheet_name="Shop_Metrics", index=False)
-            else:
-                pd.DataFrame(columns=['Shop Link', 'Date Filter']).to_excel(writer, sheet_name="Shop_Metrics", index=False)
-            
-            # --- Product Metrics ---
-            if data_store["Product_Metrics"]: 
-                df_to_save = pd.DataFrame(data_store["Product_Metrics"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.drop_duplicates(subset=['Shop Link', 'Product Name']).to_excel(writer, sheet_name="Product_Metrics", index=False)
-            else:
-                pd.DataFrame(columns=[
-                    'Shop Link', 'Product Name', 'TikTok Product Link', 
-                    'Rating', 'Number of Reviews', 'Product SKUs', 
-                    'Date Filter'
-                ]).to_excel(writer, sheet_name="Product_Metrics", index=False)
-            
-            # --- Creators ---
-            if data_store["Creators"]: 
-                df_to_save = pd.DataFrame(data_store["Creators"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.to_excel(writer, sheet_name="Creators", index=False)
-            else:
-                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Name', 'TikTok Link', 'MCN', 'Debut Time', 'Creator Bio', 'Target Sexual', 'Target Age', 'Followers', 'Date Filter']).to_excel(writer, sheet_name="Creators", index=False)
-            
-            # --- Videos ---
-            if data_store["Videos"]:
-                df_to_save = pd.DataFrame(data_store["Videos"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.to_excel(writer, sheet_name="Videos", index=False)
-            else:
-                pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Link', 'Type', 'Revenue', 'Item Title', 'Date Filter', 
-                                      'Video Duration', 'Publish Date', 'Advertising Period (Days)', 'Views', 'Item Sold', 'New Followers Generated', 'Ad View Ratio', 'Ad Revenue Ratio', 'Ads Spending', 'Ad ROAS' 
-                                      ]).to_excel(writer, sheet_name="Videos", index=False)
-            
-            # --- Lives ---
-            if data_store["Lives"]: 
-                df_to_save = pd.DataFrame(data_store["Lives"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.to_excel(writer, sheet_name="Lives", index=False)
-            else:
-                pd.DataFrame(columns=[
-                    'Shop Link', 'Product Name', 'Product Link', 'Creator Link', 
-                    'Revenue', 'Link', 'Item Title', 'Livestream Time', 'Duration',
-                    'Avg Online Viewer', 'Views', 'Item Sold', 'Avg Unit Price', 
-                    'Date Filter'
-                ]).to_excel(writer, sheet_name="Lives", index=False)
-
-            # --- [THÊM MỚI] creator_dim_shop ---
-            if data_store["creator_dim_shop"]:
-                df_to_save = pd.DataFrame(data_store["creator_dim_shop"])
-                if 'Date Filter' not in df_to_save.columns:
-                    df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
-                df_to_save.to_excel(writer, sheet_name="creator_dim_shop", index=False)
-            else:
-                pd.DataFrame(columns=['Shop Link', 'Creator Name', 'Account Type', 'TikTok Link', 'MCN', 'Debut Time', 'Creator Bio', 'Target Sexual', 'Target Age', 'Followers', 'Date Filter']).to_excel(writer, sheet_name="creator_dim_shop", index=False)
-            # -----------------------------------
-
-            # --- TẠO SHEET PRODUCT_DIM ---
-            print("    [System] Bắt đầu tạo sheet product_Dim...")
-            all_product_records = data_store.get("Product_Metrics", [])
-            seen_combinations = set()
-            unique_product_records = []
-            
-            for record in all_product_records:
-                shop_link = record.get("Shop Link", "N/A")
-                prod_name = record.get("Product Name", "N/A")
-                combination = (shop_link, prod_name)
-                if combination not in seen_combinations:
-                    seen_combinations.add(combination)
-                    unique_product_records.append(record)
-
-            product_dim_data = []
-            for record in unique_product_records: 
-                shop_link = record.get("Shop Link", "N/A")
-                prod_name = record.get("Product Name", "N/A")
-                prod_link = record.get("TikTok Product Link", "N/A")
-                product_dim_data.append({
-                    "Shop Link": shop_link,
-                    "Product Name": prod_name,
-                    "Product Link": prod_link
-                })
-
-            df_product_dim = pd.DataFrame(product_dim_data)
-            if not df_product_dim.empty:
-                df_product_dim = df_product_dim[['Shop Link', 'Product Name', 'Product Link']]
+        # ==============================================================================
+        # PHẦN 1: LƯU FILE EXCEL 
+        # ==============================================================================
+        try:
+            with pd.ExcelWriter(config.FILE_NAME, engine='openpyxl') as writer:
+                # --- Shop Metrics ---
+                if data_store["Shop_Metrics"]: 
+                    df_to_save = pd.DataFrame(data_store["Shop_Metrics"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.drop_duplicates(subset=['Shop Link']).to_excel(writer, sheet_name="Shop_Metrics", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Date Filter']).to_excel(writer, sheet_name="Shop_Metrics", index=False)
                 
-            df_product_dim.to_excel(writer, sheet_name="product_Dim", index=False)
-            print(f"    [System] Hoàn tất tạo sheet product_Dim với {len(df_product_dim)} bản ghi duy nhất.")
-            # --- HẾT TẠO SHEET PRODUCT_DIM ---
+                # --- Product Metrics ---
+                if data_store["Product_Metrics"]: 
+                    df_to_save = pd.DataFrame(data_store["Product_Metrics"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.drop_duplicates(subset=['Shop Link', 'Product Name']).to_excel(writer, sheet_name="Product_Metrics", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Product Name', 'TikTok Product Link', 'Rating', 'Number of Reviews', 'Product SKUs', 'Date Filter']).to_excel(writer, sheet_name="Product_Metrics", index=False)
+                
+                # --- Creators ---
+                if data_store["Creators"]: 
+                    df_to_save = pd.DataFrame(data_store["Creators"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.to_excel(writer, sheet_name="Creators", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Name', 'TikTok Link', 'MCN', 'Debut Time', 'Creator Bio', 'Target Sexual', 'Target Age', 'Followers', 'Date Filter']).to_excel(writer, sheet_name="Creators", index=False)
+                
+                # --- Videos ---
+                if data_store["Videos"]:
+                    df_to_save = pd.DataFrame(data_store["Videos"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.to_excel(writer, sheet_name="Videos", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Link', 'Type', 'Revenue', 'Item Title', 'Date Filter', 'Video Duration', 'Publish Date', 'Advertising Period (Days)', 'Views', 'Item Sold', 'New Followers Generated', 'Ad View Ratio', 'Ad Revenue Ratio', 'Ads Spending', 'Ad ROAS']).to_excel(writer, sheet_name="Videos", index=False)
+                
+                # --- Lives ---
+                if data_store["Lives"]: 
+                    df_to_save = pd.DataFrame(data_store["Lives"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.to_excel(writer, sheet_name="Lives", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Product Name', 'Product Link', 'Creator Link', 'Revenue', 'Link', 'Item Title', 'Livestream Time', 'Duration', 'Avg Online Viewer', 'Views', 'Item Sold', 'Avg Unit Price', 'Date Filter']).to_excel(writer, sheet_name="Lives", index=False)
 
-    except Exception as e: print(f"    [System] LỖI LƯU FILE: {e}")
+                # --- creator_dim_shop ---
+                if data_store["creator_dim_shop"]:
+                    df_to_save = pd.DataFrame(data_store["creator_dim_shop"])
+                    if 'Date Filter' not in df_to_save.columns: df_to_save['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    df_to_save.to_excel(writer, sheet_name="creator_dim_shop", index=False)
+                else: pd.DataFrame(columns=['Shop Link', 'Creator Name', 'Account Type', 'TikTok Link', 'MCN', 'Debut Time', 'Creator Bio', 'Target Sexual', 'Target Age', 'Followers', 'Date Filter']).to_excel(writer, sheet_name="creator_dim_shop", index=False)
+
+                # --- TẠO SHEET PRODUCT_DIM ---
+                print("    [System] Bắt đầu tạo sheet product_Dim...")
+                all_product_records = data_store.get("Product_Metrics", [])
+                seen_combinations = set()
+                unique_product_records = []
+                for record in all_product_records:
+                    shop_link = record.get("Shop Link", "N/A")
+                    prod_name = record.get("Product Name", "N/A")
+                    combination = (shop_link, prod_name)
+                    if combination not in seen_combinations:
+                        seen_combinations.add(combination)
+                        unique_product_records.append(record)
+
+                product_dim_data = []
+                for record in unique_product_records: 
+                    shop_link = record.get("Shop Link", "N/A")
+                    prod_name = record.get("Product Name", "N/A")
+                    prod_link = record.get("TikTok Product Link", "N/A")
+                    product_dim_data.append({"Shop Link": shop_link, "Product Name": prod_name, "Product Link": prod_link})
+
+                df_product_dim = pd.DataFrame(product_dim_data)
+                if not df_product_dim.empty:
+                    df_product_dim = df_product_dim[['Shop Link', 'Product Name', 'Product Link']]
+                    
+                df_product_dim.to_excel(writer, sheet_name="product_Dim", index=False)
+                print(f"    [System] Hoàn tất tạo sheet product_Dim với {len(df_product_dim)} bản ghi duy nhất.")
+        except Exception as e: 
+            print(f"    [System] Lỗi lưu Excel: {e}")
+
+        # ==============================================================================
+        # PHẦN 2: [BƯỚC 1.2] LƯU VÀO MYSQL
+        # ==============================================================================
+        if 'db_engine' in globals() and db_engine:
+            print("    [System] Đang đồng bộ dữ liệu sang MySQL...")
+            
+            # Mapping tên bảng
+            table_map = {
+                "Shop_Metrics": "shop_metrics",
+                "creator_dim_shop": "shop_creators",
+                "Product_Metrics": "product_metrics",
+                "Creators": "product_creators",
+                "Videos": "videos",
+                "Lives": "lives"
+            }
+
+            for key, table_name in table_map.items():
+                data = data_store.get(key, [])
+                if data:
+                    df = pd.DataFrame(data)
+                    if 'Date Filter' not in df.columns:
+                        df['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+                    
+                    # Chuyển đổi kiểu object thành string để tránh lỗi DB
+                    for col in df.columns:
+                        if df[col].dtype == object:
+                            df[col] = df[col].astype(str)
+
+                    try:
+                        # Lưu vào DB (append: nối thêm)
+                        df.to_sql(table_name, db_engine, if_exists='append', index=False, chunksize=500)
+                    except Exception as ex:
+                        print(f"      - Lỗi lưu bảng {table_name}: {ex}")
+
+            # Lưu bảng product_dim (Tính toán lại từ dữ liệu hiện có để đảm bảo mới nhất)
+            if 'product_dim_data' in locals() and product_dim_data:
+                try:
+                    df_dim = pd.DataFrame(product_dim_data)
+                    if not df_dim.empty:
+                         # Chuyển thành string
+                        for col in df_dim.columns:
+                            if df_dim[col].dtype == object: df_dim[col] = df_dim[col].astype(str)
+                        df_dim.to_sql('product_dim', db_engine, if_exists='append', index=False)
+                except Exception as ex:
+                    print(f"      - Lỗi lưu bảng product_dim: {ex}")
+            
+            print("    [System] Hoàn tất lưu Database.")
+
+    except Exception as e: print(f"    [System] LỖI TỔNG SAVE CHECKPOINT: {e}")
 
 
 def build_product_link_map():
@@ -457,12 +486,19 @@ load_checkpoint()
 
 print("Đang khởi động trình duyệt...")
 options = uc.ChromeOptions()
+
+
 options.add_argument('--start-maximized')
+options.add_argument('--no-sandbox') 
+options.add_argument('--disable-dev-shm-usage') 
+options.add_argument('--disable-gpu') 
+# options.add_argument('--headless=new') # KHÔNG BẬT HEADLESS, chúng ta sẽ dùng màn hình ảo (XVFB) để tránh bị phát hiện
+
 prefs = {"credentials_enable_service": False, "profile.password_manager_enabled": False}
 options.add_experimental_option("prefs", prefs)
 
 try: driver = uc.Chrome(options=options)
-except Exception as e: print(f"Lỗi: {e}"); exit()
+except Exception as e: print(f"Lỗi khởi động Chrome: {e}"); exit()
 
 url = "https://www.kalodata.com/shop"
 driver.get(url)
