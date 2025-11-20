@@ -2,9 +2,9 @@
 ##  Tính năng nổi bật
 
 ### 1. Cơ chế vận hành thông minh
-* ** Đăng nhập tự động:** Tự động đăng nhập và duy trì phiên làm việc an toàn.
-* ** Công nghệ Anti-Detection:** Sử dụng lõi trình duyệt tùy biến để vượt qua các cơ chế chặn bot của nền tảng.
-* ** Cơ chế Resume (Tiếp tục thông minh):** Hệ thống tự động lưu checkpoint sau mỗi tác vụ. Nếu quá trình chạy bị gián đoạn (mất mạng, tắt máy...), lần chạy sau sẽ tự động tiếp tục từ điểm dừng, tránh việc cào lại dữ liệu cũ.
+* Đăng nhập tự động: Tự động đăng nhập và duy trì phiên làm việc an toàn.
+* Công nghệ Anti-Detection: Sử dụng lõi trình duyệt tùy biến để vượt qua các cơ chế chặn bot của nền tảng.
+* Cơ chế Resume : Hệ thống tự động lưu checkpoint sau mỗi tác vụ. Nếu quá trình chạy bị gián đoạn (mất mạng, tắt máy...), lần chạy sau sẽ tự động tiếp tục từ điểm dừng, tránh việc cào lại dữ liệu cũ.
 
 ### 2. Thu thập dữ liệu đa chiều
 Công cụ đi sâu vào từng ngóc ngách dữ liệu:
