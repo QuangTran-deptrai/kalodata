@@ -1,0 +1,5 @@
+pandas
+openpyxl
+selenium
+undetected-chromedriver
+python-dotenv
