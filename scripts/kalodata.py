@@ -1,7 +1,7 @@
 import time
 import os
 import undetected_chromedriver as uc
-import scripts.config as config
+import config
 from sqlalchemy import create_engine, text
 import pandas as pd
 from selenium.webdriver.common.by import By
