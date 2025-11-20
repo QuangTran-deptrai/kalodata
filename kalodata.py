@@ -14,10 +14,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException, ElementClickInterceptedException
 )
 
-# config.FILE_NAME = "kalodata_master.xlsx"
-# config.MAX_SHOPS = 2 
-# config.FILTER_DATE_START = "2025-11-10"
-# config.FILTER_DATE_END = "2025-11-11"
+
 
 
 
@@ -98,29 +95,14 @@ def get_video_id_from_url(url):
     try: return parse_qs(urlparse(url).query)['id'][0]
     except: return None
 
-# def get_core_metrics(driver, wait):
-#     metrics_data = {}
-#     try:
-#         container_xpath = "//div[contains(@class, 'Layout-CoreMetrics')]"
-#         try: WebDriverWait(driver, 3).until(EC.visibility_of_element_located((By.XPATH, container_xpath)))
-#         except: return metrics_data
 
-#         items = driver.find_elements(By.XPATH, f"{container_xpath}//div[contains(@class, 'item')]")
-#         for item in items:
-#             try:
-#                 label = item.find_element(By.XPATH, ".//div[contains(@class, 'label')]//div[contains(@class, 'line-clamp-2')]").text.strip()
-#                 value = item.find_element(By.XPATH, ".//div[contains(@class, 'value')]").text.replace('\n', '').strip()
-#                 if label: metrics_data[label] = value
-#             except: continue
-#     except: pass
-#     return metrics_data
 
 def get_core_metrics(driver, wait):
     metrics_data = {}
     try:
         container_xpath = "//div[contains(@class, 'Layout-CoreMetrics')]"
         
-        # 1. Đợi khung chứa xuất hiện (như cũ)
+    
         try: 
             wait.until(EC.visibility_of_element_located((By.XPATH, container_xpath)))
         except: 
@@ -130,8 +112,7 @@ def get_core_metrics(driver, wait):
             try: wait.until(EC.presence_of_element_located((By.XPATH, container_xpath)))
             except: return metrics_data
 
-        # --- CẢI TIẾN QUAN TRỌNG: ĐỢI DỮ LIỆU TEXT ---
-        # Logic: "Đừng dừng lại cho đến khi thấy ít nhất một ô giá trị có chứa chữ/số"
+     
         try:
             def has_metric_data(d):
                 # Tìm tất cả các thẻ value trong container
@@ -148,15 +129,13 @@ def get_core_metrics(driver, wait):
             # Đợi tối đa 10s cho điều kiện trên xảy ra
             wait.until(has_metric_data)
         except:
-            # Nếu đợi mãi không thấy số (mạng quá lag hoặc lỗi), nghỉ thêm 2s rồi cào đại (best effort)
+            
             time.sleep(2)
 
-        # 3. Thêm thời gian đệm (buffer) sau khi số đầu tiên xuất hiện
-        # Lý do: Đôi khi số Revenue hiện trước, số Views hiện sau 0.5s. 
-        # Sleep 2s ở đây để đợi tất cả các ô "ổn định".
+        
         time.sleep(2) 
 
-        # 4. Bắt đầu cào dữ liệu
+        
         items = driver.find_elements(By.XPATH, f"{container_xpath}//div[contains(@class, 'item')]")
         for item in items:
             try:
