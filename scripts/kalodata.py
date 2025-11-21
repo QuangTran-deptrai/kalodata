@@ -4,6 +4,7 @@ import undetected_chromedriver as uc
 import config
 from sqlalchemy import create_engine, text
 import pandas as pd
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,6 +15,8 @@ from selenium.common.exceptions import (
     NoSuchElementException, TimeoutException, WebDriverException, 
     StaleElementReferenceException, ElementClickInterceptedException
 )
+import sys
+print(">>> [DEBUG] Script bat dau chay! Dang khoi dong Chrome...", flush=True)
 
 DB_USER = os.getenv('DB_USER', 'root')
 DB_PASS = os.getenv('DB_PASSWORD', '')
@@ -80,7 +83,7 @@ def click_next_page_in_tab(driver, tab_name="all"):
                 aria_disabled = btn.get_attribute("aria-disabled")
                 if "disabled" not in classes and aria_disabled != "true":
                     target_btn = btn
-                    break 
+                    break   
         
         if target_btn:
             # Scroll nhẹ để căn giữa nút
@@ -191,16 +194,73 @@ processed_live_pages = set()     # (shop_link, product_name, page_number)
 processed_product_pages = set()  # (shop_link, page_number) - Thêm dòng này
 processed_shop_creator_pages = set()
 
-# --- 2. HÀM LOAD CHECKPOINT (NẠP DỮ LIỆU CŨ) ---
+# --- 2. HÀM LOAD CHECKPOINT (THÔNG MINH: Ưu tiên MySQL -> Fallback Excel) ---
 def load_checkpoint():
     global processed_shops, data_store
     global done_names_creators, done_links_creators
     global done_names_videos, done_links_videos
     global done_names_lives, done_links_lives
-    global done_shop_creators # <--- Khai báo biến mới
+    global done_shop_creators
     
+    print(f"--- ĐANG KHỞI TẠO VÀ NẠP DỮ LIỆU CŨ... ---")
+    
+   
+    if 'db_engine' in globals() and db_engine:
+        try:
+            print("    -> Đang kiểm tra dữ liệu từ Database...")
+            date_filter_val = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
+            with db_engine.connect() as conn:
+                # 1. Load SHOP đã xong
+                try:
+                    query = text("SELECT `Shop Link` FROM shop_metrics WHERE `Date Filter` = :df")
+                    result = conn.execute(query, {"df": date_filter_val}).fetchall()
+                    for row in result:
+                        if row[0]: processed_shops.add(str(row[0]))
+                    print(f"       + Đã nạp {len(result)} Shop từ DB.")
+                except: pass
+
+                # 2. Load SHOP CREATORS đã xong
+                try:
+                    query = text("SELECT `Shop Link`, `Creator Name` FROM shop_creators WHERE `Date Filter` = :df")
+                    result = conn.execute(query, {"df": date_filter_val}).fetchall()
+                    for row in result:
+                        if row[0] and row[1]: done_shop_creators.add((str(row[0]), str(row[1])))
+                    print(f"       + Đã nạp {len(result)} Shop Creators từ DB.")
+                except: pass
+
+                # 3. Load PRODUCT CREATORS
+                try:
+                    query = text("SELECT `Shop Link`, `Product Name`, `Creator Name`, `TikTok Link` FROM product_creators WHERE `Date Filter` = :df")
+                    result = conn.execute(query, {"df": date_filter_val}).fetchall()
+                    for row in result:
+                        done_names_creators.add((str(row[0]), str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': done_links_creators.add((str(row[0]), str(row[1]), str(row[3])))
+                except: pass
+
+                # 4. Load VIDEOS
+                try:
+                    query = text("SELECT `Shop Link`, `Product Name`, `Item Title`, `Link` FROM videos WHERE `Date Filter` = :df")
+                    result = conn.execute(query, {"df": date_filter_val}).fetchall()
+                    for row in result:
+                        if row[2]: done_names_videos.add((str(row[0]), str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': done_links_videos.add((str(row[0]), str(row[1]), str(row[3])))
+                except: pass
+
+                # 5. Load LIVES
+                try:
+                    query = text("SELECT `Shop Link`, `Product Name`, `Item Title`, `Link` FROM lives WHERE `Date Filter` = :df")
+                    result = conn.execute(query, {"df": date_filter_val}).fetchall()
+                    for row in result:
+                        if row[2]: done_names_lives.add((str(row[0]), str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': done_links_lives.add((str(row[0]), str(row[1]), str(row[3])))
+                except: pass
+                
+            print("    -> Hoàn tất nạp từ Database.")
+            return # Nếu nạp DB thành công thì không cần đọc Excel nữa (tránh conflict)
+        except Exception as e:
+            print(f"    -> Lỗi đọc Database ({e}). Chuyển sang đọc file Excel...")
+
     if os.path.exists(config.FILE_NAME):
-        print(f"--- TÌM THẤY FILE. ĐANG NẠP DỮ LIỆU CŨ... ---")
         try:
             # Load Shop
             try:
@@ -217,14 +277,14 @@ def load_checkpoint():
                 data_store["Product_Metrics"] = df_prod.to_dict('records')
             except: pass
             
-            # [MỚI] Load Shop Creators (Để resume BLOCK 0)
+            # Load Shop Creators
             try:
                 df_sc = pd.read_excel(config.FILE_NAME, sheet_name="creator_dim_shop")
                 data_store["creator_dim_shop"] = df_sc.to_dict('records')
                 for _, row in df_sc.iterrows():
                     s_link = row.get('Shop Link', 'N/A')
                     c_name = row.get('Creator Name', 'N/A')
-                    if pd.notna(c_name) and c_name != 'nan':
+                    if pd.notna(c_name) and str(c_name) != 'nan':
                         done_shop_creators.add((str(s_link), str(c_name)))
             except: pass
             
@@ -243,7 +303,7 @@ def load_checkpoint():
                         done_links_creators.add((str(s_link), str(p_name), str(t_link)))
             except: pass
             
-            # Load Videos
+            # Load Videos & Lives (Tương tự)
             try:
                 df_v = pd.read_excel(config.FILE_NAME, sheet_name="Videos")
                 data_store["Videos"] = df_v.to_dict('records')
@@ -256,7 +316,6 @@ def load_checkpoint():
                     if pd.notna(link) and str(link) != "N/A": done_links_videos.add((str(s_link), str(p_name), str(link)))
             except: pass
 
-            # Load Lives
             try:
                 df_l = pd.read_excel(config.FILE_NAME, sheet_name="Lives")
                 data_store["Lives"] = df_l.to_dict('records')
@@ -269,8 +328,8 @@ def load_checkpoint():
                     if pd.notna(link) and str(link) != "N/A": done_links_lives.add((str(s_link), str(p_name), str(link)))
             except: pass
             
-            print(f"--- ĐÃ NẠP DỮ LIỆU CŨ ---")
-        except Exception as e: print(f"--- LỖI ĐỌC FILE CŨ ({e}). SẼ CHẠY MỚI. ---")
+            print(f"    -> Đã nạp dữ liệu từ file Excel.")
+        except Exception as e: print(f"--- LỖI ĐỌC FILE EXCEL ({e}). ---")
 
 def save_checkpoint():
     try:

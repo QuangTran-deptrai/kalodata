@@ -24,7 +24,8 @@ with DAG(
     
     run_scraper = BashOperator(
         task_id='run_crawler',
-        bash_command='cd /opt/airflow/scripts && xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" python kalodata.py'
+        
+        bash_command='cd /opt/airflow/scripts && xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" python -u kalodata.py'
     )
 
     run_scraper
