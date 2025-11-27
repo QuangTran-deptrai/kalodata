@@ -1,10 +1,9 @@
-
 CREATE DATABASE IF NOT EXISTS kalodata_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE kalodata_db;
 
-
+ -- Shop Metrics
 CREATE TABLE IF NOT EXISTS shop_metrics (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_metrics_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Shop_Revenue` VARCHAR(255),
     `Shop_Self-Operated Account Revenue` VARCHAR(255),
@@ -18,9 +17,9 @@ CREATE TABLE IF NOT EXISTS shop_metrics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Shop Creators
 CREATE TABLE IF NOT EXISTS shop_creators (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_creators_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Creator Name` VARCHAR(255),
     `Account Type` VARCHAR(255),
@@ -35,9 +34,9 @@ CREATE TABLE IF NOT EXISTS shop_creators (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Product Metrics
 CREATE TABLE IF NOT EXISTS product_metrics (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_metrics_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Product Name` TEXT,
     `TikTok Product Link` VARCHAR(500),
@@ -56,9 +55,9 @@ CREATE TABLE IF NOT EXISTS product_metrics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Product Creators
 CREATE TABLE IF NOT EXISTS product_creators (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_creators_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Product Name` TEXT,
     `Product Link` VARCHAR(500),
@@ -74,9 +73,9 @@ CREATE TABLE IF NOT EXISTS product_creators (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Videos
 CREATE TABLE IF NOT EXISTS videos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    video_id INT AUTO_INCREMENT PRIMARY KEY,
     `Shop Link` VARCHAR(500),
     `Product Name` TEXT,
     `Product Link` VARCHAR(500),
@@ -99,9 +98,9 @@ CREATE TABLE IF NOT EXISTS videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Lives
 CREATE TABLE IF NOT EXISTS lives (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    live_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Product Name` TEXT,
     `Product Link` VARCHAR(500),
@@ -119,9 +118,9 @@ CREATE TABLE IF NOT EXISTS lives (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
+--  Product Dimension
 CREATE TABLE IF NOT EXISTS product_dim (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_dim_id INT AUTO_INCREMENT PRIMARY KEY, 
     `Shop Link` VARCHAR(500),
     `Product Name` TEXT,
     `Product Link` VARCHAR(500),
