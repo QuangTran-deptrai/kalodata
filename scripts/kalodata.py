@@ -109,6 +109,19 @@ def get_video_id_from_url(url):
     try: return parse_qs(urlparse(url).query)['id'][0]
     except: return None
 
+def clean_shop_url(url):
+    
+    try:
+        if not url: return url
+        parsed = urlparse(url)
+        
+        shop_id = parse_qs(parsed.query).get('id', [None])[0]
+        if shop_id:
+            
+            return f"https://www.kalodata.com/shop/detail?id={shop_id}"
+    except:
+        pass
+    return url
 
 
 def get_core_metrics(driver, wait):
@@ -177,6 +190,11 @@ def get_core_metrics(driver, wait):
 data_store = {
     "Shop_Metrics": [], "Product_Metrics": [], "Creators": [], "Videos": [], "Lives": [], "creator_dim_shop": []            
 }
+
+sql_sync_cursors = {
+    "Shop_Metrics": 0, "Product_Metrics": 0, "Creators": 0, 
+    "Videos": 0, "Lives": 0, "creator_dim_shop": 0
+}
 processed_shops = set() 
 done_names_creators = set() # (shop_link, product_name, creator_name)
 done_links_creators = set() # (shop_link, product_name, tiktok_link)
@@ -194,7 +212,6 @@ processed_live_pages = set()     # (shop_link, product_name, page_number)
 processed_product_pages = set()  # (shop_link, page_number) - Thêm dòng này
 processed_shop_creator_pages = set()
 
-# --- 2. HÀM LOAD CHECKPOINT (THÔNG MINH: Ưu tiên MySQL -> Fallback Excel) ---
 def load_checkpoint():
     global processed_shops, data_store
     global done_names_creators, done_links_creators
@@ -204,18 +221,20 @@ def load_checkpoint():
     
     print(f"--- ĐANG KHỞI TẠO VÀ NẠP DỮ LIỆU CŨ... ---")
     
-   
+    # --- ƯU TIÊN 1: NẠP TỪ MYSQL ---
     if 'db_engine' in globals() and db_engine:
         try:
             print("    -> Đang kiểm tra dữ liệu từ Database...")
             date_filter_val = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
             with db_engine.connect() as conn:
-                # 1. Load SHOP đã xong
+                # 1. Load SHOP đã xong 
                 try:
                     query = text("SELECT `Shop Link` FROM shop_metrics WHERE `Date Filter` = :df")
                     result = conn.execute(query, {"df": date_filter_val}).fetchall()
                     for row in result:
-                        if row[0]: processed_shops.add(str(row[0]))
+                        if row[0]: 
+                           
+                            processed_shops.add(clean_shop_url(str(row[0])))
                     print(f"       + Đã nạp {len(result)} Shop từ DB.")
                 except: pass
 
@@ -224,7 +243,9 @@ def load_checkpoint():
                     query = text("SELECT `Shop Link`, `Creator Name` FROM shop_creators WHERE `Date Filter` = :df")
                     result = conn.execute(query, {"df": date_filter_val}).fetchall()
                     for row in result:
-                        if row[0] and row[1]: done_shop_creators.add((str(row[0]), str(row[1])))
+                        if row[0] and row[1]: 
+                            
+                            done_shop_creators.add((clean_shop_url(str(row[0])), str(row[1])))
                     print(f"       + Đã nạp {len(result)} Shop Creators từ DB.")
                 except: pass
 
@@ -233,8 +254,11 @@ def load_checkpoint():
                     query = text("SELECT `Shop Link`, `Product Name`, `Creator Name`, `TikTok Link` FROM product_creators WHERE `Date Filter` = :df")
                     result = conn.execute(query, {"df": date_filter_val}).fetchall()
                     for row in result:
-                        done_names_creators.add((str(row[0]), str(row[1]), str(row[2])))
-                        if row[3] and row[3] != 'N/A': done_links_creators.add((str(row[0]), str(row[1]), str(row[3])))
+                        
+                        clean_link = clean_shop_url(str(row[0]))
+                        done_names_creators.add((clean_link, str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': 
+                            done_links_creators.add((clean_link, str(row[1]), str(row[3])))
                 except: pass
 
                 # 4. Load VIDEOS
@@ -242,8 +266,10 @@ def load_checkpoint():
                     query = text("SELECT `Shop Link`, `Product Name`, `Item Title`, `Link` FROM videos WHERE `Date Filter` = :df")
                     result = conn.execute(query, {"df": date_filter_val}).fetchall()
                     for row in result:
-                        if row[2]: done_names_videos.add((str(row[0]), str(row[1]), str(row[2])))
-                        if row[3] and row[3] != 'N/A': done_links_videos.add((str(row[0]), str(row[1]), str(row[3])))
+                        
+                        clean_link = clean_shop_url(str(row[0]))
+                        if row[2]: done_names_videos.add((clean_link, str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': done_links_videos.add((clean_link, str(row[1]), str(row[3])))
                 except: pass
 
                 # 5. Load LIVES
@@ -251,15 +277,18 @@ def load_checkpoint():
                     query = text("SELECT `Shop Link`, `Product Name`, `Item Title`, `Link` FROM lives WHERE `Date Filter` = :df")
                     result = conn.execute(query, {"df": date_filter_val}).fetchall()
                     for row in result:
-                        if row[2]: done_names_lives.add((str(row[0]), str(row[1]), str(row[2])))
-                        if row[3] and row[3] != 'N/A': done_links_lives.add((str(row[0]), str(row[1]), str(row[3])))
+                        
+                        clean_link = clean_shop_url(str(row[0]))
+                        if row[2]: done_names_lives.add((clean_link, str(row[1]), str(row[2])))
+                        if row[3] and row[3] != 'N/A': done_links_lives.add((clean_link, str(row[1]), str(row[3])))
                 except: pass
                 
             print("    -> Hoàn tất nạp từ Database.")
-            return # Nếu nạp DB thành công thì không cần đọc Excel nữa (tránh conflict)
+            return # Nếu nạp DB thành công thì không cần đọc Excel nữa
         except Exception as e:
             print(f"    -> Lỗi đọc Database ({e}). Chuyển sang đọc file Excel...")
 
+    # --- ƯU TIÊN 2: NẠP TỪ EXCEL  ---
     if os.path.exists(config.FILE_NAME):
         try:
             # Load Shop
@@ -267,7 +296,9 @@ def load_checkpoint():
                 df_shop = pd.read_excel(config.FILE_NAME, sheet_name="Shop_Metrics")
                 for _, row in df_shop.iterrows(): 
                     shop_link = row.get('Shop Link', row.get('Shop Name', 'N/A'))
-                    if pd.notna(shop_link) and shop_link != 'nan': processed_shops.add(str(shop_link))
+                    if pd.notna(shop_link) and shop_link != 'nan': 
+                        
+                        processed_shops.add(clean_shop_url(str(shop_link)))
                 data_store["Shop_Metrics"] = df_shop.to_dict('records')
             except: pass
 
@@ -285,7 +316,8 @@ def load_checkpoint():
                     s_link = row.get('Shop Link', 'N/A')
                     c_name = row.get('Creator Name', 'N/A')
                     if pd.notna(c_name) and str(c_name) != 'nan':
-                        done_shop_creators.add((str(s_link), str(c_name)))
+                        
+                        done_shop_creators.add((clean_shop_url(str(s_link)), str(c_name)))
             except: pass
             
             # Load Product Creators
@@ -298,12 +330,14 @@ def load_checkpoint():
                     c_name = row.get('Creator Name', 'N/A')
                     t_link = row.get('TikTok Link', 'N/A')
                     
-                    done_names_creators.add((str(s_link), str(p_name), str(c_name)))
+                    # [MODIFIED] Clean URL
+                    clean_s_link = clean_shop_url(str(s_link))
+                    done_names_creators.add((clean_s_link, str(p_name), str(c_name)))
                     if pd.notna(t_link) and str(t_link) != "N/A":
-                        done_links_creators.add((str(s_link), str(p_name), str(t_link)))
+                        done_links_creators.add((clean_s_link, str(p_name), str(t_link)))
             except: pass
             
-            # Load Videos & Lives (Tương tự)
+            # Load Videos
             try:
                 df_v = pd.read_excel(config.FILE_NAME, sheet_name="Videos")
                 data_store["Videos"] = df_v.to_dict('records')
@@ -312,10 +346,14 @@ def load_checkpoint():
                     p_name = row.get('Product Name', 'N/A') 
                     title = row.get('Item Title', 'N/A')
                     link = row.get('Link', 'N/A')
-                    if pd.notna(title): done_names_videos.add((str(s_link), str(p_name), str(title)))
-                    if pd.notna(link) and str(link) != "N/A": done_links_videos.add((str(s_link), str(p_name), str(link)))
+                    
+                    
+                    clean_s_link = clean_shop_url(str(s_link))
+                    if pd.notna(title): done_names_videos.add((clean_s_link, str(p_name), str(title)))
+                    if pd.notna(link) and str(link) != "N/A": done_links_videos.add((clean_s_link, str(p_name), str(link)))
             except: pass
 
+            # Load Lives
             try:
                 df_l = pd.read_excel(config.FILE_NAME, sheet_name="Lives")
                 data_store["Lives"] = df_l.to_dict('records')
@@ -324,12 +362,19 @@ def load_checkpoint():
                     p_name = row.get('Product Name', 'N/A') 
                     title = row.get('Item Title', 'N/A')
                     link = row.get('Link', 'N/A')
-                    if pd.notna(title): done_names_lives.add((str(s_link), str(p_name), str(title)))
-                    if pd.notna(link) and str(link) != "N/A": done_links_lives.add((str(s_link), str(p_name), str(link)))
+
+                    
+                    clean_s_link = clean_shop_url(str(s_link))
+                    if pd.notna(title): done_names_lives.add((clean_s_link, str(p_name), str(title)))
+                    if pd.notna(link) and str(link) != "N/A": done_links_lives.add((clean_s_link, str(p_name), str(link)))
             except: pass
             
             print(f"    -> Đã nạp dữ liệu từ file Excel.")
         except Exception as e: print(f"--- LỖI ĐỌC FILE EXCEL ({e}). ---")
+    for key in sql_sync_cursors:
+        if key in data_store:
+            sql_sync_cursors[key] = len(data_store[key])
+    print(f"    -> Đã đồng bộ vị trí con trỏ DB: {sql_sync_cursors}")
 
 def save_checkpoint():
     try:
@@ -464,10 +509,10 @@ def save_checkpoint():
             print(f"    [System] Lỗi lưu Excel: {e}")
 
         # ==============================================================================
-        # PHẦN 2: [BƯỚC 1.2] LƯU VÀO MYSQL
+        # PHẦN 2: [BƯỚC 1.2] LƯU VÀO MYSQL (INCREMENTAL SAVE)
         # ==============================================================================
         if 'db_engine' in globals() and db_engine:
-            print("    [System] Đang đồng bộ dữ liệu sang MySQL...")
+            print("    [System] Đang đồng bộ dữ liệu MỚI sang MySQL...")
             
             # Mapping tên bảng
             table_map = {
@@ -480,34 +525,47 @@ def save_checkpoint():
             }
 
             for key, table_name in table_map.items():
-                data = data_store.get(key, [])
-                if data:
-                    df = pd.DataFrame(data)
+                current_data_list = data_store.get(key, [])
+                current_len = len(current_data_list)
+                last_saved_idx = sql_sync_cursors.get(key, 0)
+
+                # Chỉ lưu nếu có dữ liệu mới (len hiện tại > len lần lưu trước)
+                if current_len > last_saved_idx:
+                    # Cắt lấy phần dữ liệu mới chưa được lưu
+                    new_records = current_data_list[last_saved_idx:]
+                    
+                    df = pd.DataFrame(new_records)
                     if 'Date Filter' not in df.columns:
                         df['Date Filter'] = f"{config.FILTER_DATE_START} ~ {config.FILTER_DATE_END}"
                     
-                    # Chuyển đổi kiểu object thành string để tránh lỗi DB
+                    # Chuyển đổi kiểu object thành string
                     for col in df.columns:
                         if df[col].dtype == object:
                             df[col] = df[col].astype(str)
 
                     try:
-                        # Lưu vào DB (append: nối thêm)
+                        # Lưu vào DB (append phần mới)
                         df.to_sql(table_name, db_engine, if_exists='append', index=False, chunksize=500)
+                        
+                        
+                        sql_sync_cursors[key] = current_len
+                        print(f"      + Đã thêm {len(new_records)} dòng mới vào bảng {table_name}.")
                     except Exception as ex:
                         print(f"      - Lỗi lưu bảng {table_name}: {ex}")
 
-            # Lưu bảng product_dim (Tính toán lại từ dữ liệu hiện có để đảm bảo mới nhất)
+           
             if 'product_dim_data' in locals() and product_dim_data:
                 try:
                     df_dim = pd.DataFrame(product_dim_data)
                     if not df_dim.empty:
-                         # Chuyển thành string
                         for col in df_dim.columns:
                             if df_dim[col].dtype == object: df_dim[col] = df_dim[col].astype(str)
+                        
+                        
                         df_dim.to_sql('product_dim', db_engine, if_exists='append', index=False)
                 except Exception as ex:
-                    print(f"      - Lỗi lưu bảng product_dim: {ex}")
+                    
+                    pass 
             
             print("    [System] Hoàn tất lưu Database.")
 
@@ -768,7 +826,7 @@ try:
                 time.sleep(3) 
                 
                 # 1. Lấy Shop Link và Metrics Shop
-                shop_link = driver.current_url 
+                shop_link = clean_shop_url(driver.current_url)
                 if shop_link not in processed_shops:
                     shop_metrics = get_core_metrics(driver, WebDriverWait(driver, 10))
                     shop_record = {"Shop Link": shop_link} 
