@@ -1,106 +1,144 @@
 
-##  Tính năng nổi bật
+## 🌟 Tính Năng Nổi Bật 
 
-### 1. Cơ chế vận hành thông minh
-* Đăng nhập tự động: Tự động đăng nhập và duy trì phiên làm việc an toàn.
-* Công nghệ Anti-Detection: Sử dụng lõi trình duyệt tùy biến để vượt qua các cơ chế chặn bot của nền tảng.
-* Cơ chế Resume : Hệ thống tự động lưu checkpoint sau mỗi tác vụ. Nếu quá trình chạy bị gián đoạn (mất mạng, tắt máy...), lần chạy sau sẽ tự động tiếp tục từ điểm dừng, tránh việc cào lại dữ liệu cũ.
+### 1. 🛡️ Hệ thống Vận hành Ổn định & Thông minh
+* **Dockerized:** Toàn bộ hệ thống (Code, Chrome, MySQL, Airflow) chạy trong container cô lập, đảm bảo "chạy là đúng" trên mọi máy.
+* **Anti-Crash Chrome:** Cấu hình bộ nhớ chia sẻ (`shm_size: 2gb`) và cửa sổ ảo tối ưu, khắc phục hoàn toàn lỗi sập trình duyệt khi tải trang nặng.
+* **Smart Resume:** Tự động ghi nhớ vị trí đã cào. Nếu bị ngắt giữa chừng, lần sau chạy sẽ tiếp tục từ điểm dừng, không bao giờ cào lại từ đầu.
 
-### 2. Thu thập dữ liệu đa chiều
-Công cụ đi sâu vào từng ngóc ngách dữ liệu:
-* **Shop Overview:** Doanh thu tổng, số lượng bán, số lượng Affiliate đang hoạt động.
-* **Shop Creators Database:** Quét toàn bộ danh sách Creator liên kết với Shop, bao gồm thông tin quan trọng như **Account Type** (Seller/Affiliate), MCN, Bio, và Follower.
-* **Product Intelligence:** Chỉ số chi tiết từng sản phẩm (Doanh thu, Rating, Reviews, Số lượng SKU, Link gốc TikTok).
-* **Content Analytics (Video & Live):**
-    * **Video:** View, Doanh thu, Thời lượng, Ngày đăng, và các chỉ số Quảng cáo (Ad Spending, ROAS).
-    * **Livestream:** Số người xem trung bình (Avg Viewer), Doanh thu phiên Live, Sản phẩm bán ra.
+### 2. 💾 Cơ chế Lưu trữ Tối ưu 
+* **Không trùng lặp :** Sử dụng thuật toán đồng bộ con trỏ (Cursor Sync), chỉ nạp dữ liệu **mới** vào Database. Database luôn sạch và nhẹ.
+* **URL Optimization:** Tự động làm sạch và chuẩn hóa đường dẫn (chỉ giữ lại `shop_id`), giúp tiết kiệm dung lượng lưu trữ và dễ dàng truy vấn.
+* **Dual Storage:** Dữ liệu được lưu song song:
+    * **MySQL:** Dùng cho phân tích chuyên sâu, làm kho dữ liệu (Data Warehouse).
+    * **Excel:** Dùng để báo cáo nhanh và kiểm tra thủ công.
 
+### 3. 📊 Thu thập Dữ liệu Đa chiều
+* **Shop Overview:** Doanh thu, sản lượng bán, chỉ số vận hành.
+* **Shop Creators:** Danh sách KOL/KOC đang gắn affiliate (kèm thông tin liên hệ, chỉ số Follower, MCN).
+* **Product Intelligence:** Chi tiết sản phẩm, Rating, Review, Doanh thu từng SKU.
+* **Content Analytics:**
+    * **Video:** View, Doanh thu, Ad Spend, ROAS, Thời lượng.
+    * **Livestream:** Mắt xem trung bình (Avg View), Doanh thu phiên Live, Thời gian Live.
 
+---
 
-##  Yêu cầu hệ thống
+## 📋 Yêu cầu Hệ thống
 
-Để vận hành công cụ, máy tính cần cài đặt:
-* **Hệ điều hành:** Windows 10/11 hoặc macOS.
-* **Python:** Phiên bản 3.8 trở lên.
-* **Google Chrome:** Phiên bản mới nhất.
-* **Git:** Để quản lý mã nguồn.
+* **Docker & Docker Compose** (Bắt buộc).
+* **RAM:** Khuyến nghị từ 6GB trở lên (Do chạy Chrome + MySQL + Airflow cùng lúc).
+* **Disk:** Trống khoảng 10GB.
 
+---
 
+## 🚀 Hướng dẫn Cài đặt & Triển khai
 
-##  Hướng dẫn cài đặt & Cấu hình
+### Bước 1: Tải mã nguồn
 
-### Bước 1: Cài đặt môi trường
-Mở Terminal (hoặc PowerShell) và thực hiện các lệnh sau:
-
-# 1. Clone dự án về máy
 git clone [https://github.com/QuangTran-deptrai/kalodata.git](https://github.com/QuangTran-deptrai/kalodata.git)
 cd kalodata
 
-# 2. Tạo môi trường ảo (Khuyên dùng để tránh xung đột thư viện)
-python -m venv venv
+### Bước 2: Cấu hình tham số (.env)
 
-# 3. Kích hoạt môi trường ảo
-# -> Trên Windows:
-.\venv\Scripts\activate
-# -> Trên macOS/Linux:
-source venv/bin/activate
-
-# 4. Cài đặt các thư viện cần thiết
-pip install -r requirements.txt
+Tạo file `.env` tại thư mục gốc và điền thông tin tài khoản Kalodata của bạn:
 
 
-1. Cấu hình Tài khoản (.env)
-Tạo một file mới tên là .env (không có đuôi file) tại thư mục gốc dự án. Điền thông tin đăng nhập Kalodata của bạn vào file này:
-# File: .env
+# --- 1. TÀI KHOẢN KALODATA (BẮT BUỘC) ---
 KALO_PHONE=0912345678
-KALO_PASSWORD=MatKhauCuaBanO_Day
+KALO_PASSWORD=MatKhauCuaBan
+
+# --- 2. CẤU HÌNH DATABASE  ---
+DB_HOST=
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+
+# --- 3. CẤU HÌNH AIRFLOW ---
+AIRFLOW_UID=50000
 
 
-2. Cấu hình Chạy (config.py)
-Mở file config.py có sẵn trong dự án để chỉnh sửa các thông số lọc dữ liệu theo nhu cầu:
+### Bước 3: Khởi chạy hệ thống
 
-# File: config.py
-
-# Khoảng thời gian muốn lấy dữ liệu (Định dạng YYYY-MM-DD)
-FILTER_DATE_START = "2025-11-10"
-FILTER_DATE_END = "2025-11-11"
-
-# Số lượng Shop tối đa muốn quét trong một lần chạy
-MAX_SHOPS = 5
-
-Quy trình hoạt động của Tool:
-
-Mở trình duyệt Chrome -> Đăng nhập tự động.
-
-Vào danh sách Shop -> Lọc theo ngày tháng cấu hình.
-
-Vào từng Shop -> Lấy thông tin Shop & Danh sách Creator của Shop.
-
-Vào danh sách Sản phẩm -> Lấy chi tiết Sản phẩm (Rating, Review...).
-
-Vào từng Sản phẩm -> Lấy danh sách Video & Livestream liên quan.
-
-Lưu dữ liệu liên tục vào file Excel.
+Chạy lệnh sau để Docker tự động cài đặt môi trường và khởi tạo Database:
 
 
-Tên Sheet,Nội dung chi tiết
-Shop_Metrics,"Tổng quan chỉ số kinh doanh của Shop (Revenue, Sold, Affiliates count...)."
-creator_dim_shop,Danh sách Creator cấp Shop. Đặc biệt: Có cột Account Type phân loại Affiliate/Seller.
-Product_Metrics,"Chi tiết sản phẩm: Doanh thu, Giá, Rating (Đánh giá), Reviews (Số lượng review), Product SKUs."
-product_Dim,"Danh mục sản phẩm rút gọn (Link Shop, Tên Sản phẩm, Link TikTok)."
-Creators,Danh sách Creator quảng bá cho từng sản phẩm cụ thể.
-Videos,"Dữ liệu Video chi tiết: Views, Revenue, Duration, Ad Metrics (ROAS, Spend)."
-Lives,"Dữ liệu Livestream: Thời lượng, Doanh thu, Avg Online Viewer, Item Sold."
+docker-compose up -d --build
 
 
+*(Lưu ý: Lần đầu chạy sẽ mất vài phút để tải Image và cài đặt thư viện Python).*
+
+-----
+
+## ▶️ Hướng dẫn Sử dụng
+
+### 1\. Truy cập Airflow
+
+  * **Địa chỉ:** `http://localhost:8080`
+  * **Tài khoản:** 
+  * **Mật khẩu:** 
+
+### 2\. Kích hoạt Tool
+
+1.  Tìm DAG có tên: **`kalodata_crawler_daily`**.
+2.  Bật công tắc **ON** (Góc trái) để kích hoạt lịch chạy tự động (Mặc định 00:00 hàng ngày).
+3.  Nếu muốn chạy ngay lập tức: Bấm nút **Play ▶️** (Trigger DAG) bên góc phải.
+
+### 3\. Theo dõi tiến trình
+
+  * Click vào Task đang chạy (màu xanh lá cây nhạt) -\> Chọn **Log** để xem Tool đang làm gì theo thời gian thực.
+  * *Lưu ý: Bạn sẽ KHÔNG thấy trình duyệt hiện lên vì nó chạy ngầm (Headless/Virtual Display) trong Docker.*
+
+-----
+
+## 📊 Truy cập Dữ liệu
+
+### Cách 1: Kết nối MySQL (Khuyên dùng)
+
+Dùng DBeaver, Navicat hoặc MySQL Workbench kết nối với thông số:
+
+  * **Host:** `localhost` (hoặc IP VPS)
+  * **Port:** `3307` (Docker map port 3306 -\> 3307)
+  * **User:** 
+  * **Pass:** 
+  * **Database:** 
+
+### Cách 2: Lấy file Excel
+
+File Excel tổng hợp nằm tại thư mục `scripts/` của dự án:
+
+  * Tên file: `kalodata_master.xlsx`
+
+-----
+
+## 📂 Cấu trúc Database
+
+Dữ liệu được tổ chức thành các bảng quan hệ chặt chẽ:
+
+| Tên Bảng | Mô tả dữ liệu |
+| :--- | :--- |
+| **`shop_metrics`** | Chỉ số tổng quan Shop (Doanh thu, Link Shop đã chuẩn hóa). |
+| **`shop_creators`** | Danh sách Creator liên kết với Shop. |
+| **`product_metrics`** | Chỉ số chi tiết từng sản phẩm. |
+| **`product_creators`** | Creator nào bán sản phẩm nào. |
+| **`videos`** | Dữ liệu Video TikTok (Ads, Revenue, Views). |
+| **`lives`** | Dữ liệu Livestream (Revenue, Duration, Viewer). |
+| **`product_dim`** | Bảng danh mục sản phẩm duy nhất (Dùng để map quan hệ). |
+
+-----
+
+## ⚠️ Reset Hệ thống (Quan trọng)
+
+Nếu bạn muốn xóa sạch dữ liệu cũ để chạy lại từ đầu (ví dụ sau khi cập nhật code mới):
 
 
-Lưu ý khi vận hành
-Không thao tác chuột: Khi tool đang chạy và mở trình duyệt, vui lòng không tự ý click chuột hoặc tắt cửa sổ trình duyệt, điều này có thể làm gián đoạn quy trình tự động.
+# 1. Tắt và xóa toàn bộ dữ liệu cũ (bao gồm Database)
+docker-compose down -v
 
-Tốc độ mạng: Đảm bảo kết nối mạng ổn định để tool tải trang đầy đủ dữ liệu.
+# 2. Chạy lại từ đầu
+docker-compose up -d --build
 
-Làm mới dữ liệu: Nếu muốn chạy lại từ đầu (xóa hết dữ liệu cũ), hãy xóa file kalodata_master.xlsx hoặc đổi tên file đầu ra trong config.py.
 
+-----
 
+Developed by QuangTran.
 
