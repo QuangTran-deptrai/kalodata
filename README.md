@@ -59,15 +59,18 @@ AIRFLOW_UID=50000
 
 ### Bước 3: Khởi chạy hệ thống
 
-Chạy lệnh sau để Docker tự động cài đặt môi trường và khởi tạo Database:
+**⚠️ Lưu ý quan trọng cho người dùng Linux / VPS / MacOS:**
+Để tránh lỗi quyền truy cập (Permission Denied) khi ghi log, bạn cần cấp quyền cho các thư mục trước khi chạy:
 
+chmod -R 777 logs dags
+
+**Sau đó chạy lệnh khởi tạo:**
 
 docker-compose up -d --build
 
-
 *(Lưu ý: Lần đầu chạy sẽ mất vài phút để tải Image và cài đặt thư viện Python).*
 
------
+
 
 ## ▶️ Hướng dẫn Sử dụng
 
