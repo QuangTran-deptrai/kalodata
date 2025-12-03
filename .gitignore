@@ -24,9 +24,9 @@ kalodata_master.xlsx
 Thumbs.db
 *.log
 
-# Docker Logs 
-logs/
+# Docker Logs - GIỮ LẠI .gitkeep
+logs/*
+!logs/.gitkeep
 "@
-
 
 Set-Content .gitignore $gitignoreContent -Encoding UTF8
