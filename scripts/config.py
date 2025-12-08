@@ -8,8 +8,12 @@ load_dotenv()
 FILE_NAME = "kalodata_master.xlsx"
 BASE_URL = "https://www.kalodata.com/shop"
 
-FILTER_DATE_START = "2025-11-10"
-FILTER_DATE_END = "2025-11-11"
+HISTORY_START_DATE = "2025-10-01" 
+HISTORY_END_DATE = "2025-11-30"
+
+
+FILTER_DATE_START = "2025-10-01"
+FILTER_DATE_END = "2025-10-01"
 
 
 MAX_SHOPS = 2

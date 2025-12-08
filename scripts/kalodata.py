@@ -16,6 +16,19 @@ from selenium.common.exceptions import (
     StaleElementReferenceException, ElementClickInterceptedException
 )
 import sys
+
+if len(sys.argv) > 1:
+    
+    current_run_date = sys.argv[1]
+    
+    print(f"\n>>> [AUTO] Đang thay đổi cấu hình filter sang ngày: {current_run_date}")
+    
+    
+    config.FILTER_DATE_START = current_run_date
+    config.FILTER_DATE_END = current_run_date
+else:
+    print(f">>> [MANUAL] Chạy theo cấu hình cứng trong file config: {config.FILTER_DATE_START}")
+
 print(">>> [DEBUG] Script bat dau chay! Dang khoi dong Chrome...", flush=True)
 
 DB_USER = os.getenv('DB_USER', 'root')
