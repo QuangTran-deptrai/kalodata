@@ -5,3 +5,5 @@ undetected-chromedriver
 python-dotenv
 sqlalchemy
 pymysql
+DrissionPage
+curl_cffi

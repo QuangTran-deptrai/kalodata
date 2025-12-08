@@ -8,7 +8,7 @@ import os
 # --- 1. THÊM ĐƯỜNG DẪN ĐỂ ĐỌC FILE CONFIG ---
 # Vì file config.py nằm trong thư mục scripts, ta cần trỏ đường dẫn vào đó
 sys.path.append("/opt/airflow/scripts")
-import config  # Import file config của bạn
+import config  
 
 local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 

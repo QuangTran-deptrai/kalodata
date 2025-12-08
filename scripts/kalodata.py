@@ -4,6 +4,9 @@ import undetected_chromedriver as uc
 import config
 from sqlalchemy import create_engine, text
 import pandas as pd
+import json
+import shutil
+from DrissionPage import ChromiumPage, ChromiumOptions
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -614,7 +617,201 @@ def build_creator_link_map():
 
 load_checkpoint()
 
-print("Đang khởi động trình duyệt...")
+def find_chrome_executable():
+    """Tìm đường dẫn Chrome/Chromium executable"""
+    # Các tên phổ biến trên Linux/Windows/Mac
+    candidates = [
+        "google-chrome", "chrome", "chromium", "chromium-browser",
+        "google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium",
+        "C:/Program Files/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+    ]
+    
+    for candidate in candidates:
+        path = shutil.which(candidate) or candidate
+        if os.path.exists(path) and os.access(path, os.X_OK):
+            return path
+            
+    # Nếu không tìm thấy, trả về None để DrissionPage tự xử (hoặc fail)
+    return None
+
+# --- DRISSION PAGE CLOUDFLARE SOLVER ---
+def solve_cloudflare_with_drission():
+    print(">>> [DrissionPage] Đang khởi động để bypass Cloudflare...")
+    
+    # Cấu hình DrissionPage
+    co = ChromiumOptions()
+    co.set_argument('--no-sandbox')
+    co.set_argument('--disable-gpu')
+    # [REVERT] Không fake UA Windows trên Linux nữa vì sẽ gây mismatch (OS fingerprint != UA)
+    # co.set_argument('--user-agent=...') 
+    
+    # [FIX] Tìm và set đường dẫn browser cụ thể
+    browser_path = find_chrome_executable()
+    if browser_path:
+        print(f"    -> Tìm thấy browser tại: {browser_path}")
+        co.set_paths(browser_path=browser_path)
+    else:
+        print("    -> Không tìm thấy browser path cụ thể, dùng mặc định 'chrome'...")
+
+    # co.headless(True) # Có thể bật headless nếu chạy trên server linux không có GUI
+    
+    try:
+        page = ChromiumPage(co)
+        
+        target_url = "https://www.kalodata.com/shop"
+        print(f">>> [DrissionPage] Truy cập: {target_url}")
+        page.get(target_url)
+        
+        # Đợi Cloudflare (tự động xử lý bởi DrissionPage trong hầu hết trường hợp)
+        print("    -> Đang kiểm tra Cloudflare...")
+        
+        # Loop check để click checkbox liên tục nếu cần
+        for i in range(20): # Thử trong 60 giây (20 * 3s)
+            if "Just a moment" not in page.title and "Cloudflare" not in page.title:
+                print("    -> Đã vượt qua Cloudflare (Title OK).")
+                break
+                
+            print(f"    -> [{i+1}/20] Vẫn còn Cloudflare, thử click...")
+            
+            try:
+                # --- CHIẾN THUẬT TURNSTILE (USER SUGGESTION) ---
+                # Tìm tất cả iframe
+                iframes = page.eles("tag:iframe")
+                for iframe in iframes:
+                    # Lấy thuộc tính để nhận diện
+                    title = (iframe.attr("title") or "").lower()
+                    src = (iframe.attr("src") or "").lower()
+                    
+                    if "challenge" in title or "cloudflare" in title or "turnstile" in src:
+                        print("      -> Tìm thấy Iframe Cloudflare/Turnstile! Đang xử lý...")
+                        
+                        # --- PHƯƠNG ÁN 1: Click trực diện (Nếu may mắn Shadow DOM mở) ---
+                        try:
+                            # Tìm checkbox trong iframe (DrissionPage tự xuyên iframe)
+                            # Lưu ý: DrissionPage không cần switch_to.frame như Selenium
+                            # Ta tìm trong body của iframe đó
+                            iframe_body = iframe.ele("tag:body", timeout=1)
+                            if iframe_body:
+                                cb = iframe_body.ele("css:input[type='checkbox']", timeout=1)
+                                if cb:
+                                    print("      => [Cách 1] Đã click checkbox thành công!")
+                                    cb.click()
+                                    break
+                        except: pass
+                        
+                        # --- PHƯƠNG ÁN 2: Click theo tọa độ (Blind Click) ---
+                        try:
+                            print("      => [Cách 2] Thử click theo tọa độ (20, 20) trong iframe...")
+                            # Click vào body của iframe với offset
+                            if iframe_body:
+                                # DrissionPage click offset tính từ tâm element, nên cần tính toán lại hoặc dùng action chain
+                                # Ở đây ta click vào góc trái trên của iframe body
+                                # page.actions.move_to(iframe_body, offset_x=20, offset_y=20).click() -> Logic này khác Selenium
+                                # Selenium (0,0) là góc trái trên. DrissionPage (0,0) là tâm.
+                                # Để click góc trái trên (20,20), ta cần move tới top-left rồi offset
+                                page.actions.move_to(iframe_body, offset_x=-iframe_body.rect.size[0]/2 + 20, offset_y=-iframe_body.rect.size[1]/2 + 20).click()
+                        except Exception as e:
+                            # print(f"Lỗi click tọa độ: {e}")
+                            pass
+                            
+                        # --- PHƯƠNG ÁN 3: Dùng phím (Tab + Space) ---
+                        try:
+                            print("      => [Cách 3] Thử dùng phím TAB + SPACE...")
+                            # Focus vào iframe trước
+                            page.actions.move_to(iframe).click() 
+                            time.sleep(0.2)
+                            page.actions.key_down('Tab').key_up('Tab')
+                            time.sleep(0.2)
+                            page.actions.key_down('Space').key_up('Space')
+                        except: pass
+                        
+                        time.sleep(1)
+
+            except Exception as e: 
+                # print(f"    -> Lỗi xử lý: {e}")
+                pass
+            
+            time.sleep(3)
+            
+        print(f"    -> Tiêu đề sau khi xử lý: {page.title}")
+        
+        # [DEBUG] Nếu vẫn thất bại, in ra một phần HTML để debug
+        if "Just a moment" in page.title or "Cloudflare" in page.title:
+            print("!!! Vẫn chưa qua được Cloudflare. HTML dump (500 chars):")
+            try: print(page.html[:500])
+            except: pass
+        
+        # [FIX ROBUST] Lấy cookies an toàn
+        cookies_dict = {}
+        try:
+            # Cách 1: DrissionPage v4 chuẩn (property)
+            if hasattr(page, 'cookies') and hasattr(page.cookies, 'as_dict'):
+                cookies_dict = page.cookies.as_dict()
+            # Cách 2: DrissionPage cũ hoặc biến thể (method)
+            elif callable(getattr(page, 'cookies', None)):
+                try: cookies_dict = page.cookies(as_dict=True)
+                except: cookies_dict = dict(page.cookies())
+            # Cách 3: Property trả về list/dict trực tiếp
+            elif isinstance(page.cookies, dict):
+                cookies_dict = page.cookies
+            elif isinstance(page.cookies, list):
+                for c in page.cookies:
+                    if isinstance(c, dict): cookies_dict[c.get('name')] = c.get('value')
+            # Cách 4: Fallback cuối cùng
+            else:
+                cookies_dict = dict(page.cookies)
+        except Exception as e:
+            print(f"    -> Lỗi lấy cookie (thử fallback): {e}")
+            try: 
+                # [FIX] Sửa lỗi dictionary update sequence element #0 has length 3
+                # Nếu page.cookies trả về list các object cookie, ta cần lấy name/value từ object đó
+                cookies_dict = {}
+                for c in page.cookies:
+                    if hasattr(c, 'name') and hasattr(c, 'value'):
+                        cookies_dict[c.name] = c.value
+                    elif isinstance(c, dict):
+                        cookies_dict[c.get('name')] = c.get('value')
+            except: pass
+
+        if not cookies_dict:
+            print("!!! Không lấy được cookie nào. Có thể bypass thất bại.")
+            print(">>> [DrissionPage] KHÔNG GHI ĐÈ FILE COOKIES.JSON. Giữ lại cookie cũ.")
+            page.quit()
+            return False
+        
+        # Chuyển đổi sang format của Selenium (list of dicts)
+        selenium_cookies = []
+        for name, value in cookies_dict.items():
+            selenium_cookies.append({
+                "name": name,
+                "value": value,
+                "domain": ".kalodata.com", # Set chung domain
+                "path": "/"
+            })
+            
+        # Lưu vào file
+        with open("cookies.json", "w", encoding="utf-8") as f:
+            json.dump(selenium_cookies, f, indent=4)
+            
+        print(f">>> [DrissionPage] Đã lưu {len(selenium_cookies)} cookies vào cookies.json")
+        page.quit()
+        return True
+        
+    except Exception as e:
+        print(f"!!! [DrissionPage] Lỗi: {e}")
+        try: page.quit()
+        except: pass
+        return False
+
+# Chạy bypass trước khi vào Selenium
+# Logic: Luôn chạy bypass để lấy cookie tươi, hoặc chỉ chạy khi không có cookie
+# Ở đây ta chọn: Luôn chạy để đảm bảo 
+# [USER REQUEST] Chuyển sang dùng Selenium Undetected hoàn toàn
+# # [USER REQUEST] Chuyển sang dùng Selenium Undetected hoàn toàn
+# solve_cloudflare_with_drission()
+
+print("Đang khởi động trình duyệt Selenium...")
 options = uc.ChromeOptions()
 
 
@@ -622,44 +819,202 @@ options.add_argument('--start-maximized')
 options.add_argument('--no-sandbox') 
 options.add_argument('--disable-dev-shm-usage') 
 options.add_argument('--disable-gpu') 
+# [NEW] Fake User-Agent theo yêu cầu user (Chrome 143)
+options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36')
 # options.add_argument('--headless=new') # KHÔNG BẬT HEADLESS, chúng ta sẽ dùng màn hình ảo (XVFB) để tránh bị phát hiện
+
+# [NEW] Thêm profile để lưu session (tránh phải login lại nhiều lần và bypass Cloudflare tốt hơn)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+profile_path = os.path.join(script_dir, "chrome_profile")
+
+# [NEW] Xóa profile cũ để tránh lỗi cache/state bẩn
+if os.path.exists(profile_path):
+    try:
+        print(f">>> [System] Đang xóa profile cũ để clean start: {profile_path}")
+        shutil.rmtree(profile_path, ignore_errors=True)
+    except Exception as e:
+        print(f"!!! Không thể xóa profile cũ: {e}")
+
+options.add_argument(f"--user-data-dir={profile_path}")
 
 prefs = {"credentials_enable_service": False, "profile.password_manager_enabled": False}
 options.add_experimental_option("prefs", prefs)
 
-try: driver = uc.Chrome(options=options)
-except Exception as e: print(f"Lỗi khởi động Chrome: {e}"); exit()
-
-url = "https://www.kalodata.com/shop"
-driver.get(url)
-wait = WebDriverWait(driver, 20)
-
-# --- AUTO LOGIN ---
-print("\n--- BẮT ĐẦU ĐĂNG NHẬP TỰ ĐỘNG ---")
 try:
+    
+    driver = uc.Chrome(options=options, version_main=142)
+except Exception as e:
+    print(f"Lỗi khởi động Chrome: {e}")
+    
+    sys.exit(1)
+
+# --- BẮT ĐẦU: LOGIC NẠP COOKIES & ĐĂNG NHẬP THÔNG MINH ---
+target_url = "https://www.kalodata.com/shop"
+
+# 1. Truy cập domain để kích hoạt trình duyệt
+print(f">>> [Cookies] Đang truy cập domain để nạp Cookies...")
+driver.get("https://www.kalodata.com/404") 
+time.sleep(3)
+
+# 2. Đọc và nạp Cookies
+try:
+    cookie_path = "cookies.json"
+    if os.path.exists(cookie_path):
+        with open(cookie_path, 'r', encoding='utf-8') as f:
+            cookies = json.load(f)
+        print(f">>> [Cookies] Tìm thấy {len(cookies)} cookies. Đang inject...")
+        for cookie in cookies:
+            if 'sameSite' in cookie and cookie['sameSite'] not in ["Strict", "Lax", "None"]:
+                del cookie['sameSite']
+            if 'storeId' in cookie: del cookie['storeId']
+            try: driver.add_cookie(cookie)
+            except: pass
+        print("    -> Đã nạp Cookies thành công!")
+    else:
+        print("!!! KHÔNG TÌM THẤY FILE cookies.json.")
+except Exception as e:
+    print(f"!!! LỖI NẠP COOKIES: {e}")
+
+# 3. Vào trang đích
+print(f">>> [System] Đang vào trang đích: {target_url}")
+driver.get(target_url)
+
+# [NEW] LOGIC BYPASS CLOUDFLARE TURNSTILE (SELENIUM)
+print(">>> [Selenium] Đang kiểm tra Cloudflare Turnstile...")
+time.sleep(5) # Chờ load
+
+try:
+    # Lặp kiểm tra iframe
+    iframes = driver.find_elements(By.TAG_NAME, "iframe")
+    print(f"    -> Tìm thấy {len(iframes)} iframe(s).")
+    
+    cf_iframe_found = False
+    for idx, iframe in enumerate(iframes):
+        iframe_title = str(iframe.get_attribute("title") or "").lower()
+        iframe_src = str(iframe.get_attribute("src") or "").lower()
+        iframe_id = str(iframe.get_attribute("id") or "").lower()
+        
+        print(f"       [{idx}] id='{iframe_id[:30]}' title='{iframe_title[:30]}' src='{iframe_src[:50]}'")
+        
+        # Mở rộng điều kiện detect
+        if ("challenge" in iframe_title or "cloudflare" in iframe_title or 
+            "turnstile" in iframe_src or "cf-" in iframe_id or "challenges.cloudflare" in iframe_src):
+            print("    -> Phát hiện Iframe Cloudflare! Đang xâm nhập...")
+            cf_iframe_found = True
+            driver.switch_to.frame(iframe)
+            time.sleep(1)
+            
+            # --- PHƯƠNG ÁN 1: Click trực diện ---
+            try:
+                checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+                checkbox.click()
+                print("    => [Cách 1] Đã click checkbox thành công!")
+                driver.switch_to.default_content()
+                break
+            except: pass
+            
+            # --- PHƯƠNG ÁN 2: Click theo tọa độ (Blind Click) ---
+            try:
+                print("    => [Cách 2] Thử click theo tọa độ (30, 30)...")
+                action = ActionChains(driver)
+                action.move_to_element_with_offset(driver.find_element(By.TAG_NAME, "body"), 30, 30).click().perform()
+            except Exception as e: 
+                print(f"       Lỗi click tọa độ: {e}")
+
+            # --- PHƯƠNG ÁN 3: Dùng phím (Tab + Space) ---
+            try:
+                print("    => [Cách 3] Thử dùng phím TAB + SPACE...")
+                action = ActionChains(driver)
+                action.send_keys(Keys.TAB).send_keys(Keys.SPACE).perform()
+            except: pass
+
+            driver.switch_to.default_content()
+            time.sleep(3)
+            break # Thoát sau khi xử lý iframe đầu tiên
+    
+    if not cf_iframe_found and len(iframes) > 0:
+        print("    -> Không tìm thấy iframe CF cụ thể. Thử click iframe đầu tiên có src...")
+        for iframe in iframes:
+            if iframe.get_attribute("src"):
+                driver.switch_to.frame(iframe)
+                try:
+                    action = ActionChains(driver)
+                    action.move_to_element_with_offset(driver.find_element(By.TAG_NAME, "body"), 30, 30).click().perform()
+                    time.sleep(0.5)
+                    action = ActionChains(driver)
+                    action.send_keys(Keys.TAB).send_keys(Keys.SPACE).perform()
+                except: pass
+                driver.switch_to.default_content()
+                time.sleep(2)
+                break
+            
+except Exception as e:
+    print(f"    -> Lỗi xử lý iframe: {e}")
+
+# Check lại title
+if "Just a moment" in driver.title or "Cloudflare" in driver.title:
+    print("\n!!! PHÁT HIỆN CLOUDFLARE (Bypass chưa thành công) !!!")
+    print(">>> Cookie không hợp lệ hoặc bị chặn IP. Đang chờ thêm 30s...")
+    print(">>> Đang thử chờ thêm 30s xem có tự qua không...")
+    time.sleep(30)
+    
+    if "Just a moment" in driver.title or "Cloudflare" in driver.title:
+        print("!!! Vẫn bị kẹt ở Cloudflare. Dừng script để tránh treo.")
+        # Chụp ảnh màn hình để debug
+        try: driver.save_screenshot("cloudflare_stuck_final.png")
+        except: pass
+        sys.exit(1)
+
+print(">>> Đã vượt qua Cloudflare (hoặc không bị chặn).")
+
+# 4. QUYẾT ĐỊNH: CÓ CẦN ĐĂNG NHẬP KHÔNG?
+# Nếu URL KHÔNG chứa chữ 'login' nghĩa là đã vào được Dashboard -> BỎ QUA ĐĂNG NHẬP
+if "login" not in driver.current_url:
+    print(">>> TUYỆT VỜI! ĐÃ VÀO THẲNG DASHBOARD (Bỏ qua bước Login)!")
+    
+else:
+    # Chỉ chạy dòng này nếu Cookies hỏng và bị văng ra trang Login
+    print("\n--- COOKIES HẾT HẠN - BẮT ĐẦU ĐĂNG NHẬP THỦ CÔNG ---")
     try:
-        login_popup_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Log in / Sign up')]")))
-        login_popup_btn.click()
-    except:
-        login_popup_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'V2-Components-Button')]")))
-        login_popup_btn.click()
-    time.sleep(3)
-    try: wait.until(EC.element_to_be_clickable((By.XPATH, "//div[text()='Log in']"))).click(); time.sleep(1)
-    except: pass 
-    phone_input = wait.until(EC.visibility_of_element_located((By.ID, "register_phone")))
-    phone_input.clear()
-    
-    phone_input.send_keys(config.LOGIN_PHONE) 
-    time.sleep(1)
-    
-    pass_input = wait.until(EC.visibility_of_element_located((By.ID, "register_password")))
-    pass_input.clear()
-    
-    pass_input.send_keys(config.LOGIN_PASSWORD) 
-    time.sleep(1)
-    wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))).click()
-    time.sleep(5)
-except Exception as e: print(f"!!! LỖI ĐĂNG NHẬP (Tiếp tục...): {e}")
+       
+        try:
+            login_popup_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Log in / Sign up')]")))
+            login_popup_btn.click()
+        except:
+            try: 
+                login_popup_btn = driver.find_element(By.XPATH, "//div[contains(@class, 'V2-Components-Button')]")
+                login_popup_btn.click()
+            except: pass
+            
+        time.sleep(3)
+        try: WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//div[text()='Log in']"))).click(); time.sleep(1)
+        except: pass 
+
+        phone_input = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.ID, "register_phone")))
+        phone_input.clear()
+        phone_input.send_keys(config.LOGIN_PHONE) 
+        time.sleep(1)
+        
+        pass_input = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.ID, "register_password")))
+        pass_input.clear()
+        pass_input.send_keys(config.LOGIN_PASSWORD) 
+        time.sleep(1)
+        
+        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))).click()
+        time.sleep(10)
+        
+        # Kiểm tra lại lần cuối
+        if "login" in driver.current_url:
+            raise Exception("Đăng nhập thất bại, vẫn ở trang login.")
+            
+    except Exception as e: 
+        print(f"!!! LỖI ĐĂNG NHẬP NGHIÊM TRỌNG: {e}")
+        driver.save_screenshot("login_fatal_error.png")
+        sys.exit(1)
+
+# --- KẾT THÚC LOGIC ĐĂNG NHẬP ---
+
+wait = WebDriverWait(driver, 30)
 
 # --- CLEAN POPUP ---
 short_wait = WebDriverWait(driver, 5)
